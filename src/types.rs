@@ -60,8 +60,8 @@ pub struct Repository {
 impl Repository {
     pub fn insert_respository_query(&self) -> &str {
         let query_string = r#"
-        INSERT INTO repositories (slug, project_id)
-        VALUES ($1, $2)
+        INSERT INTO repositories (slug, project_id, url)
+        VALUES ($1, $2, $3)
         RETURNING id;
         "#;
         return query_string;

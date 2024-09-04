@@ -4,7 +4,7 @@ use types::{KudosIssue, Payload, RepoInfo};
 
 use lambda_http::{
     run, service_fn,
-    tracing::{self, error},
+    tracing::{self, error, info},
     Body, Error, Request, Response,
 };
 use octocrab::{params::State, Octocrab};
@@ -32,6 +32,8 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
         return Err(Error::from("Error: secrets don't match"));
     }
 
+    info!("Secrets match!");
+
     let pool = PgPool::connect(&env::var("DATABASE_URL")?).await?;
 
     // get project id - need to ensure that name and slug are unique!
@@ -44,6 +46,7 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     let project_id: i32 = project_row.get("id");
 
     if let Some(attributes) = payload.attributes {
+        info!("we have atttributes: inserting them!");
         sqlx::query("UPDATE projects SET purposes = $1, stack_levels = $2, technologies = $3, types = $4 WHERE id = $5")
         .bind(attributes.purposes)
         .bind(attributes.stack_levels)
@@ -54,6 +57,8 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     }
 
     for repo in payload.repos_to_remove {
+        // potentially refactor to use a single delete statment
+        info!("deleting repositories!");
         // This should automatically cascade to issues table
         sqlx::query("DELETE FROM repositories WHERE url = $1")
             .bind(repo.url)
@@ -62,6 +67,7 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     }
 
     if payload.repos_to_add.is_empty() {
+        info!("no repos to add, early return!");
         // return early
         return Ok(Response::builder()
             .status(200)
@@ -84,6 +90,10 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
         let repo_row = sqlx::query(repo.insert_respository_query())
             .bind(&repo.label)
             .bind(project_id)
+            .bind(format!(
+                "https://github.com/{}/{}",
+                &repo_info.owner, &repo_info.name
+            ))
             .fetch_one(&pool)
             .await?;
         let repo_id: i32 = repo_row.get("id");
